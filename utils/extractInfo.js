@@ -1,16 +1,16 @@
 var path = require('path');
 var fs = require('fs');
-// const extract = require('babel-extract-comments');
+const extract = require('babel-extract-comments');
 const babelParser = require('babylon');
 const babelTraverse = require('@babel/traverse').default
 const stringify = require('csv-stringify')
-const blackList = ['.DS_Store','.html', '.map']
-let res = [], id = 0
+const blackList = ['.DS_Store']
+let res = []
 
 /*
 description: 提取文件中的注释和标识符
  */
-function extractFileInfo(fpath, lib) {
+function extractFileInfo(fpath) {
     let funcNum = 0
     const code = fs.readFileSync(fpath, 'utf-8'),
         fInfo = fs.statSync(fpath),
@@ -29,7 +29,7 @@ function extractFileInfo(fpath, lib) {
                     let { declarations } = node
                     for (let i = 0, len = declarations.length; i < len; i++) {
                         switch (declarations[i].id.type) {
-                            // 对象结构赋值
+                            // 对象解构赋值
                             case 'ObjectPattern':
                                 const props = declarations[i].id.properties
                                 props.forEach(({ key }) => {
@@ -79,63 +79,67 @@ function extractFileInfo(fpath, lib) {
             const comments = ast.comments
             babelTraverse(ast, visitor)
             res.push({
-                id: id,
                 identifiers: identifiers.map(formatIdentifier)
                     .reduce((a, b) => a.concat(b), [])
                     .join(' ')
                     .toLocaleLowerCase(),
                 commentsArr: comments.map(d => d.value.toLowerCase()),
                 comments:comments.map(d => d.value).join(' ').toLocaleLowerCase(),
-                filename: fpath,
+                fileName: fpath,
                 size: fInfo.size,
-                func: funcNum,
-                version: getVersion(fpath.replace(/\\/g, '\\\\'), lib)
+                funcNum
+                // version: getVersion(fpath.replace(/\\/g, '\\\\'))
             })
-            id++
         }
         catch(e){
             console.log(fpath)
             res.push({
-                id: id,
                 identifiers: [],
                 commentsArr: [],
                 comments:'',
-                filename: fpath,
+                fileName: fpath,
                 size: fInfo.size,
-                func: funcNum,
-                version: getVersion(fpath.replace(/\\/g, '\\\\'), lib),
+                funcNum
+                // version: getVersion(fpath.replace(/\\/g, '\\\\')),
             })
-            id++
             return
         }
+    
+    // console.log('identifiers:', identifiers, fpath)
+   
 }
 
-function getVersion (filename, lib) {
-    let verReg = new RegExp(lib+"-(\\d*\\.\\d*\\.\\d*)")
-    return filename.match(verReg)[1]
+function getVersion (fileName) {
+    let verReg = /d3-(\d*\.\d*\.\d*)/
+    if(fileName.match(verReg))
+        return fileName.match(verReg)[1]
+    else{
+        verReg = /d3-(\d*\.\d*)/
+        return fileName.match(verReg)[1]
+    }
 }
 
 /*
 @desc 获取该目录下所有文件的文字信息
  */
-function extractText(rootPath, lib) {
+function extractText(rootPath) {
     function traverseDir(dir) {
         const files = fs.readdirSync(dir)
         files.forEach(function (file, index) {
-            let suffix = file.substr(file.lastIndexOf('.'))
-            if (blackList.indexOf(suffix) !== -1) return
+            if (blackList.indexOf(file) !== -1) return
             var curPath = path.resolve(dir, file),
                 info = fs.statSync(curPath)
             if (info.isDirectory()) {
                 traverseDir(curPath);
             } else {
-                extractFileInfo(curPath, lib)
+                extractFileInfo(curPath)
             }
         })
     }
     res = []
     traverseDir(path.resolve(rootPath, 'src'))
-    write2Csv(res, rootPath, lib)
+    const seg = rootPath.split('/'), dirName = seg[seg.length - 1]
+    write2Csv(res, dirName)
 }
 
 /**
@@ -155,41 +159,34 @@ function formatIdentifier(id) {
 /*
 @desc 将对象转成csv格式并写入文件
  */
-function write2Csv(res, filename, lib) {
-    console.log('writing:', filename)
-    //构造路径
-    let fpath = filename.substr(0, filename.lastIndexOf('\\'))
-    fpath = fpath.substr(0, fpath.lastIndexOf('\\'))
-    fpath.replace(/\\/g, '/')
-
+function write2Csv(res, fileName) {
+    console.log('writing:', fileName)
     stringify(res, {
         // header: true
     }, (err, data) => {
-        fs.appendFileSync(fpath+"/"+lib+"-all-original-text.csv", data);
-        console.log("finish writing:", filename)
+        // fs.writeFileSync(`/Users/wendahuang/Desktop/data/${fileName}.csv`, data)
+        fs.appendFileSync(`C:/Users/50809/Desktop/d3/d3-all.csv`, data);
+        console.log("finish writing:", fileName)
     })
 }
 
-function main(src, lib) {
-    const files = fs.readdirSync(src)
+// extractFileInfo('../mock/commentId.js')
 
-    //先排序版本
-    files.sort(function(a, b){
-        let arrA = getVersion(a, lib).split('.'),
-            arrB = getVersion(b, lib).split('.')
-        for(let i=0; i<arrA.length; i++){
-            if(parseInt(arrA[i]) > parseInt(arrB[i])) return 1
-            if(parseInt(arrA[i]) < parseInt(arrB[i])) return -1
-        }
-    })
-
+function main() {
+    const vueSrc = 'C:/Users/50809/Desktop/d3/d3-all-versions',
+        files = fs.readdirSync(vueSrc)
     let fpath = null
     for (let i = 0, len = files.length; i < len; i++) {
-        fpath = path.resolve(src, files[i])
+        fpath = path.resolve(vueSrc, files[i])
         let stat = fs.statSync(fpath)
-        stat.isDirectory() && extractText(fpath, lib)
+        stat.isDirectory() && extractText(fpath)
     }
 }
+// console.log(path.resolve(__dirname,'../public/javascripts/draft.js'))
+main()
+// extractFileInfo(path.resolve(__dirname,'../public/javascripts/draft.js'))
+/* traverseDir(srcDir)
+write2Csv(res) */
 
-// 第一个参数是类库所在的文件夹，第二个参数是类库名
-main('C:/Users/50809/Desktop/vue/vue-all-versions', 'vue')
+// console.log(res)
+// extractFileInfo('C:\\Users\\50809\\Desktop\\d3\\d3-all-versions\\d3-1.0.0\\src\\core\\selection.js')
